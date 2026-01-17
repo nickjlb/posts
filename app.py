@@ -72,6 +72,32 @@ def init_db():
         )
     ''')
 
+    # Create settings table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    ''')
+
+    # Set default blog title if not exists
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('blog_title', 'My Blog')")
+
+    conn.commit()
+    conn.close()
+
+def get_setting(key, default=None):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+    result = cursor.fetchone()
+    conn.close()
+    return result['value'] if result else default
+
+def set_setting(key, value):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
     conn.commit()
     conn.close()
 
@@ -86,6 +112,7 @@ def blog():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 12, type=int)
     tag_filter = request.args.get('tag', None)
+    view_mode = request.args.get('view', 'masonry')  # masonry or grid
 
     conn = get_db()
     cursor = conn.cursor()
@@ -144,13 +171,17 @@ def blog():
 
     conn.close()
 
+    blog_title = get_setting('blog_title', 'My Blog')
+
     return render_template('blog.html',
                          posts=posts_data,
                          page=page,
                          per_page=per_page,
                          total_pages=total_pages,
                          tag_filter=tag_filter,
-                         all_tags=all_tags)
+                         all_tags=all_tags,
+                         blog_title=blog_title,
+                         view_mode=view_mode)
 
 @app.route('/post/<int:post_id>')
 def view_post(post_id):
@@ -268,6 +299,69 @@ def cms_images():
                          images=images_data,
                          tag_filter=tag_filter,
                          all_tags=all_tags)
+
+@app.route('/images')
+def blog_images():
+    tag_filter = request.args.get('tag', None)
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get all images with their post information (published posts only)
+    if tag_filter:
+        query = '''
+            SELECT DISTINCT i.*, p.title as post_title, p.id as post_id
+            FROM images i
+            JOIN posts p ON i.post_id = p.id
+            JOIN post_tags pt ON p.id = pt.post_id
+            JOIN tags t ON pt.tag_id = t.id
+            WHERE p.status = 'published' AND t.name = ?
+            ORDER BY i.id DESC
+        '''
+        cursor.execute(query, (tag_filter,))
+    else:
+        cursor.execute('''
+            SELECT i.*, p.title as post_title, p.id as post_id
+            FROM images i
+            JOIN posts p ON i.post_id = p.id
+            WHERE p.status = 'published'
+            ORDER BY i.id DESC
+        ''')
+
+    images = cursor.fetchall()
+
+    # Get all tags from published posts that have images
+    cursor.execute('''
+        SELECT DISTINCT t.name
+        FROM tags t
+        JOIN post_tags pt ON t.id = pt.tag_id
+        JOIN posts p ON pt.post_id = p.id
+        JOIN images i ON p.id = i.post_id
+        WHERE p.status = 'published'
+        ORDER BY t.name
+    ''')
+    all_tags = [row['name'] for row in cursor.fetchall()]
+
+    conn.close()
+
+    images_data = [dict(img) for img in images]
+    blog_title = get_setting('blog_title', 'My Blog')
+
+    return render_template('blog_images.html',
+                         images=images_data,
+                         tag_filter=tag_filter,
+                         all_tags=all_tags,
+                         blog_title=blog_title)
+
+@app.route('/cms/settings', methods=['GET', 'POST'])
+def cms_settings():
+    if request.method == 'POST':
+        blog_title = request.form.get('blog_title', 'My Blog')
+        set_setting('blog_title', blog_title)
+        return redirect(url_for('cms'))
+
+    blog_title = get_setting('blog_title', 'My Blog')
+    return render_template('settings.html', blog_title=blog_title)
 
 @app.route('/cms/post/new', methods=['GET', 'POST'])
 def new_post():

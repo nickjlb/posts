@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Blog CMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="cms-body">
+    <div class="cms-container">
+        <header class="cms-header">
+            <h1>⚙️ Settings</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('cms') }}" class="btn btn-secondary">← Back to CMS</a>
+            </div>
+        </header>
+
+        <form method="POST" class="post-form">
+            <div class="form-group">
+                <label for="blog_title">Blog Title</label>
+                <input type="text"
+                       id="blog_title"
+                       name="blog_title"
+                       class="form-control"
+                       value="{{ blog_title }}"
+                       placeholder="My Blog"
+                       required>
+                <small style="color: var(--text-muted); margin-top: 4px; display: block;">
+                    This will appear in the blog header and browser title.
+                </small>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large">Save Settings</button>
+                <a href="{{ url_for('cms') }}" class="btn btn-secondary btn-large">Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

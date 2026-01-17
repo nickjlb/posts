@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Blog</title>
+    <title>{{ blog_title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="blog-body">
     <nav class="blog-nav">
         <div class="nav-container">
-            <h1 class="blog-title">My Blog</h1>
-            <a href="{{ url_for('cms') }}" class="btn btn-secondary btn-small">Admin</a>
+            <h1 class="blog-title">{{ blog_title }}</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('blog_images') }}" class="btn btn-secondary btn-small">Images</a>
+                <a href="{{ url_for('cms') }}" class="btn btn-secondary btn-small">Admin</a>
+            </div>
         </div>
     </nav>
 
@@ -18,26 +21,32 @@
         <!-- Tag Filter -->
         <div class="filter-bar">
             <div class="tag-filters">
-                <a href="{{ url_for('blog', per_page=per_page) }}" class="filter-tag {% if not tag_filter %}active{% endif %}">All</a>
+                <a href="{{ url_for('blog', per_page=per_page, view=view_mode) }}" class="filter-tag {% if not tag_filter %}active{% endif %}">All</a>
                 {% for tag in all_tags %}
-                <a href="{{ url_for('blog', tag=tag, per_page=per_page) }}" class="filter-tag {% if tag_filter == tag %}active{% endif %}">{{ tag }}</a>
+                <a href="{{ url_for('blog', tag=tag, per_page=per_page, view=view_mode) }}" class="filter-tag {% if tag_filter == tag %}active{% endif %}">{{ tag }}</a>
                 {% endfor %}
             </div>
 
-            <div class="per-page-selector">
-                <label for="perPage">Posts per page:</label>
-                <select id="perPage" onchange="changePerPage(this.value)">
-                    <option value="6" {% if per_page == 6 %}selected{% endif %}>6</option>
-                    <option value="12" {% if per_page == 12 %}selected{% endif %}>12</option>
-                    <option value="24" {% if per_page == 24 %}selected{% endif %}>24</option>
-                    <option value="48" {% if per_page == 48 %}selected{% endif %}>48</option>
-                </select>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div class="view-toggle">
+                    <button class="view-toggle-btn {% if view_mode == 'masonry' %}active{% endif %}" onclick="changeView('masonry')">Masonry</button>
+                    <button class="view-toggle-btn {% if view_mode == 'grid' %}active{% endif %}" onclick="changeView('grid')">Grid</button>
+                </div>
+                <div class="per-page-selector">
+                    <label for="perPage">Posts per page:</label>
+                    <select id="perPage" onchange="changePerPage(this.value)">
+                        <option value="6" {% if per_page == 6 %}selected{% endif %}>6</option>
+                        <option value="12" {% if per_page == 12 %}selected{% endif %}>12</option>
+                        <option value="24" {% if per_page == 24 %}selected{% endif %}>24</option>
+                        <option value="48" {% if per_page == 48 %}selected{% endif %}>48</option>
+                    </select>
+                </div>
             </div>
         </div>
 
-        <!-- Masonry Grid -->
+        <!-- Post Grid -->
         {% if posts %}
-        <div class="masonry-grid" id="masonryGrid">
+        <div class="{% if view_mode == 'grid' %}blog-grid-view{% else %}masonry-grid{% endif %}" id="postsContainer">
             {% for post in posts %}
             <div class="masonry-item">
                 <div class="post-images">
@@ -63,7 +72,7 @@
                     {% endif %}
                 </div>
                 <div class="post-content">
-                    <h2>{{ post.title }}</h2>
+                    <h2><a href="{{ url_for('view_post', post_id=post.id) }}" class="post-title-link">{{ post.title }}</a></h2>
                     {% if post.content %}
                     <p>{{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}</p>
                     {% endif %}
@@ -71,7 +80,7 @@
                         {% if post.tags %}
                         <div class="post-tags">
                             {% for tag in post.tags %}
-                            <a href="{{ url_for('blog', tag=tag, per_page=per_page) }}" class="tag">{{ tag }}</a>
+                            <a href="{{ url_for('blog', tag=tag, per_page=per_page, view=view_mode) }}" class="tag">{{ tag }}</a>
                             {% endfor %}
                         </div>
                         {% endif %}
@@ -175,6 +184,12 @@
             const url = new URL(window.location.href);
             url.searchParams.set('per_page', value);
             url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        }
+
+        function changeView(view) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('view', view);
             window.location.href = url.toString();
         }
     </script>

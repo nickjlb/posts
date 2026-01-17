@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Images - {{ blog_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="blog-body">
+    <nav class="blog-nav">
+        <div class="nav-container">
+            <h1 class="blog-title">{{ blog_title }} - Images</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('blog') }}" class="btn btn-secondary btn-small">← Back to Blog</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="blog-container">
+        <!-- Tag Filter -->
+        <div class="filter-bar" style="margin-bottom: 20px;">
+            <div class="tag-filters">
+                <a href="{{ url_for('blog_images') }}" class="filter-tag {% if not tag_filter %}active{% endif %}">All</a>
+                {% for tag in all_tags %}
+                <a href="{{ url_for('blog_images', tag=tag) }}" class="filter-tag {% if tag_filter == tag %}active{% endif %}">{{ tag }}</a>
+                {% endfor %}
+            </div>
+            <div class="gallery-stats">
+                <span>{{ images|length }} image{{ 's' if images|length != 1 else '' }}</span>
+            </div>
+        </div>
+
+        <!-- Image Grid (Masonry) -->
+        {% if images %}
+        <div class="image-gallery-grid">
+            {% for image in images %}
+            <div class="gallery-image-item">
+                <div class="gallery-image-wrapper">
+                    <img src="{{ url_for('static', filename='uploads/' + image.filename) }}"
+                         alt="{{ image.post_title }}"
+                         onclick="openLightbox({{ loop.index0 }})">
+                </div>
+                <div class="gallery-image-info">
+                    <a href="{{ url_for('view_post', post_id=image.post_id) }}" class="gallery-post-link">
+                        {{ image.post_title }}
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <h2>No images found</h2>
+            <p>{% if tag_filter %}Try a different tag or view all images.{% else %}No published posts with images yet.{% endif %}</p>
+            <a href="{{ url_for('blog') }}" class="btn btn-primary">Go to Blog</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox">
+        <button class="lightbox-close" onclick="closeLightbox()">×</button>
+        <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">‹</button>
+        <button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">›</button>
+        <div class="lightbox-content">
+            <img id="lightboxImage" src="" alt="">
+            <div class="lightbox-caption" id="lightboxCaption"></div>
+        </div>
+    </div>
+
+    <script>
+        const images = [
+            {% for image in images %}
+            {
+                url: "{{ url_for('static', filename='uploads/' + image.filename) }}",
+                title: "{{ image.post_title }}"
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        let currentImageIndex = 0;
+
+        function openLightbox(index) {
+            currentImageIndex = index;
+            updateLightboxImage();
+            document.getElementById('lightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function navigateLightbox(direction) {
+            currentImageIndex = (currentImageIndex + direction + images.length) % images.length;
+            updateLightboxImage();
+        }
+
+        function updateLightboxImage() {
+            document.getElementById('lightboxImage').src = images[currentImageIndex].url;
+            document.getElementById('lightboxCaption').textContent = images[currentImageIndex].title;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const lightbox = document.getElementById('lightbox');
+            if (lightbox.classList.contains('active')) {
+                if (e.key === 'Escape') closeLightbox();
+                if (e.key === 'ArrowLeft') navigateLightbox(-1);
+                if (e.key === 'ArrowRight') navigateLightbox(1);
+            }
+        });
+
+        document.getElementById('lightbox').addEventListener('click', (e) => {
+            if (e.target.id === 'lightbox') {
+                closeLightbox();
+            }
+        });
+    </script>
+</body>
+</html>
