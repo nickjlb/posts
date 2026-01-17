@@ -7,6 +7,10 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import sqlite3
 from pathlib import Path
+import re
+import json
+from PIL import Image, ExifTags
+import markdown
 
 # Get the base directory (works for both script and exe)
 if getattr(sys, 'frozen', False):
@@ -36,11 +40,26 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT,
+            slug TEXT UNIQUE,
             status TEXT DEFAULT 'draft',
+            featured INTEGER DEFAULT 0,
+            category_id INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL
         )
     ''')
+
+    # Add new columns to existing posts table
+    try:
+        cursor.execute('ALTER TABLE posts ADD COLUMN slug TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE posts ADD COLUMN featured INTEGER DEFAULT 0')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE posts ADD COLUMN category_id INTEGER')
+    except: pass
 
     # Create images table
     cursor.execute('''
@@ -49,7 +68,51 @@ def init_db():
             post_id INTEGER,
             filename TEXT NOT NULL,
             order_index INTEGER DEFAULT 0,
+            caption TEXT,
+            alt_text TEXT,
+            camera TEXT,
+            lens TEXT,
+            iso TEXT,
+            aperture TEXT,
+            shutter_speed TEXT,
+            focal_length TEXT,
             FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Add new columns to existing images table
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN caption TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN alt_text TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN camera TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN lens TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN iso TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN aperture TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN shutter_speed TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE images ADD COLUMN focal_length TEXT')
+    except: pass
+
+    # Create categories table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            slug TEXT UNIQUE NOT NULL,
+            description TEXT
         )
     ''')
 
@@ -80,8 +143,10 @@ def init_db():
         )
     ''')
 
-    # Set default blog title if not exists
+    # Set default settings if not exists
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('blog_title', 'My Blog')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('font_headings', 'system')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('font_body', 'system')")
 
     conn.commit()
     conn.close()
@@ -105,6 +170,107 @@ def get_db():
     conn = sqlite3.connect(app.config['DATABASE'])
     conn.row_factory = sqlite3.Row
     return conn
+
+# Helper functions
+def generate_slug(title):
+    """Generate URL-friendly slug from title"""
+    slug = title.lower()
+    slug = re.sub(r'[^\w\s-]', '', slug)
+    slug = re.sub(r'[-\s]+', '-', slug)
+    return slug.strip('-')
+
+def extract_exif_data(filepath):
+    """Extract EXIF data from image"""
+    try:
+        img = Image.open(filepath)
+        exif_data = img._getexif()
+        if not exif_data:
+            return {}
+
+        exif = {}
+        for tag_id, value in exif_data.items():
+            tag = ExifTags.TAGS.get(tag_id, tag_id)
+            exif[tag] = value
+
+        # Extract useful fields
+        result = {}
+        result['camera'] = exif.get('Model', '')
+        result['lens'] = exif.get('LensModel', '')
+        result['iso'] = str(exif.get('ISOSpeedRatings', ''))
+
+        # Format aperture
+        if 'FNumber' in exif:
+            aperture = exif['FNumber']
+            if isinstance(aperture, tuple):
+                result['aperture'] = f"f/{aperture[0]/aperture[1]:.1f}"
+            else:
+                result['aperture'] = f"f/{aperture}"
+
+        # Format shutter speed
+        if 'ExposureTime' in exif:
+            exposure = exif['ExposureTime']
+            if isinstance(exposure, tuple):
+                if exposure[0] == 1:
+                    result['shutter_speed'] = f"1/{exposure[1]}"
+                else:
+                    result['shutter_speed'] = f"{exposure[0]/exposure[1]:.2f}s"
+            else:
+                result['shutter_speed'] = f"{exposure}s"
+
+        # Format focal length
+        if 'FocalLength' in exif:
+            focal = exif['FocalLength']
+            if isinstance(focal, tuple):
+                result['focal_length'] = f"{focal[0]/focal[1]:.0f}mm"
+            else:
+                result['focal_length'] = f"{focal}mm"
+
+        # Extract keywords/tags from EXIF
+        keywords = []
+        if 'Keywords' in exif:
+            keywords = exif['Keywords'] if isinstance(exif['Keywords'], list) else [exif['Keywords']]
+        elif 'XPKeywords' in exif:
+            # Windows tags
+            try:
+                kw = exif['XPKeywords'].decode('utf-16').rstrip('\x00')
+                keywords = [k.strip() for k in kw.split(';') if k.strip()]
+            except:
+                pass
+
+        result['keywords'] = keywords
+        return result
+    except Exception as e:
+        print(f"Error extracting EXIF: {e}")
+        return {}
+
+def optimize_image(filepath):
+    """Optimize and resize image if needed"""
+    try:
+        img = Image.open(filepath)
+
+        # Convert RGBA to RGB if needed
+        if img.mode == 'RGBA':
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[3])
+            img = background
+
+        # Resize if too large (max 2000px on longest side)
+        max_size = 2000
+        if max(img.size) > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
+        # Save optimized
+        img.save(filepath, 'JPEG', quality=85, optimize=True)
+        return True
+    except Exception as e:
+        print(f"Error optimizing image: {e}")
+        return False
+
+def render_markdown(text):
+    """Convert markdown to HTML"""
+    if not text:
+        return ''
+    return markdown.markdown(text, extensions=['nl2br', 'fenced_code'])
 
 # Routes
 @app.route('/')
@@ -500,6 +666,24 @@ def upload_image():
         filepath = app.config['UPLOAD_FOLDER'] / filename
         file.save(filepath)
 
+        # Extract EXIF data
+        exif_data = extract_exif_data(filepath)
+
+        # Optimize image
+        optimize_image(filepath)
+
+        # Auto-add EXIF keywords as tags to post
+        if post_id and exif_data.get('keywords'):
+            conn = get_db()
+            cursor = conn.cursor()
+            for keyword in exif_data['keywords']:
+                cursor.execute('INSERT OR IGNORE INTO tags (name) VALUES (?)', (keyword,))
+                cursor.execute('SELECT id FROM tags WHERE name = ?', (keyword,))
+                tag_id = cursor.fetchone()['id']
+                cursor.execute('INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)', (post_id, tag_id))
+            conn.commit()
+            conn.close()
+
         if post_id:
             conn = get_db()
             cursor = conn.cursor()
@@ -510,14 +694,24 @@ def upload_image():
             order_index = (result['max_order'] or -1) + 1
 
             cursor.execute('''
-                INSERT INTO images (post_id, filename, order_index)
-                VALUES (?, ?, ?)
-            ''', (post_id, filename, order_index))
+                INSERT INTO images (post_id, filename, order_index, camera, lens, iso, aperture, shutter_speed, focal_length)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (post_id, filename, order_index,
+                  exif_data.get('camera', ''),
+                  exif_data.get('lens', ''),
+                  exif_data.get('iso', ''),
+                  exif_data.get('aperture', ''),
+                  exif_data.get('shutter_speed', ''),
+                  exif_data.get('focal_length', '')))
 
             conn.commit()
             conn.close()
 
-        return jsonify({'filename': filename, 'url': url_for('static', filename=f'uploads/{filename}')})
+        return jsonify({
+            'filename': filename,
+            'url': url_for('static', filename=f'uploads/{filename}'),
+            'exif': exif_data
+        })
 
     return jsonify({'error': 'Upload failed'}), 400
 
