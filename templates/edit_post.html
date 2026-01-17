@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if post %}Edit Post{% else %}New Post{% endif %} - Blog CMS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="cms-body">
+    <div class="cms-container">
+        <header class="cms-header">
+            <h1>{% if post %}Edit Post{% else %}New Post{% endif %}</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('cms') }}" class="btn btn-secondary">← Back to CMS</a>
+            </div>
+        </header>
+
+        <form method="POST" class="post-form" id="postForm">
+            <div class="form-group">
+                <label for="title">Title</label>
+                <input type="text" id="title" name="title" class="form-control" value="{{ post.title if post else '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="content">Content</label>
+                <textarea id="content" name="content" class="form-control" rows="10">{{ post.content if post else '' }}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="tags">Tags (comma separated)</label>
+                <input type="text" id="tags" name="tags" class="form-control" value="{{ post.tags|join(', ') if post else '' }}" placeholder="travel, photography, nature">
+            </div>
+
+            <div class="form-group">
+                <label>Images</label>
+                <div class="image-upload-area" id="uploadArea">
+                    <div class="upload-placeholder">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <p>Drag & drop images here or click to browse</p>
+                        <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+                    </div>
+                </div>
+                <div class="images-preview" id="imagesPreview">
+                    {% if post and post.images %}
+                        {% for image in post.images %}
+                        <div class="image-preview-item" data-image-id="{{ image.id }}">
+                            <img src="{{ url_for('static', filename='uploads/' + image.filename) }}" alt="">
+                            <button type="button" class="delete-image-btn" onclick="deleteImage({{ image.id }})">×</button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Status</label>
+                <div class="status-toggle">
+                    <label class="radio-label">
+                        <input type="radio" name="status" value="draft" {% if not post or post.status == 'draft' %}checked{% endif %}>
+                        <span>Draft</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="status" value="published" {% if post and post.status == 'published' %}checked{% endif %}>
+                        <span>Published</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large">Save Post</button>
+                <a href="{{ url_for('cms') }}" class="btn btn-secondary btn-large">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const postId = {{ post.id if post else 'null' }};
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const imagesPreview = document.getElementById('imagesPreview');
+
+        // Click to upload
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            Array.from(files).forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    uploadImage(file);
+                }
+            });
+        }
+
+        function uploadImage(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            if (postId) {
+                formData.append('post_id', postId);
+            }
+
+            // Show preview immediately
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const preview = document.createElement('div');
+                preview.className = 'image-preview-item uploading';
+                preview.innerHTML = `
+                    <img src="${e.target.result}" alt="">
+                    <div class="upload-progress">Uploading...</div>
+                `;
+                imagesPreview.appendChild(preview);
+
+                // Upload
+                fetch('/cms/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    preview.classList.remove('uploading');
+                    if (postId && data.filename) {
+                        // Reload to get image ID
+                        location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload failed:', error);
+                    preview.remove();
+                    alert('Upload failed. Please try again.');
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function deleteImage(imageId) {
+            if (!confirm('Delete this image?')) return;
+
+            fetch(`/cms/image/${imageId}/delete`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                const imageItem = document.querySelector(`[data-image-id="${imageId}"]`);
+                if (imageItem) {
+                    imageItem.remove();
+                }
+            })
+            .catch(error => {
+                console.error('Delete failed:', error);
+                alert('Delete failed. Please try again.');
+            });
+        }
+    </script>
+</body>
+</html>

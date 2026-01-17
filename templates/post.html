@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ post.title }} - My Blog</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="blog-body">
+    <nav class="blog-nav">
+        <div class="nav-container">
+            <a href="{{ url_for('blog') }}" class="back-link">← Back to Blog</a>
+        </div>
+    </nav>
+
+    <article class="post-view">
+        <header class="post-header">
+            <h1>{{ post.title }}</h1>
+            <div class="post-meta">
+                <span class="post-date">{{ post.created_at[:10] }}</span>
+                {% if post.tags %}
+                <div class="post-tags">
+                    {% for tag in post.tags %}
+                    <a href="{{ url_for('blog', tag=tag) }}" class="tag">{{ tag }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </header>
+
+        {% if post.images %}
+        <div class="post-images-gallery">
+            {% for image in post.images %}
+            <img src="{{ url_for('static', filename='uploads/' + image.filename) }}"
+                 alt="{{ post.title }}"
+                 onclick="openLightbox({{ loop.index0 }})">
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if post.content %}
+        <div class="post-body">
+            {{ post.content|safe }}
+        </div>
+        {% endif %}
+    </article>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox">
+        <button class="lightbox-close" onclick="closeLightbox()">×</button>
+        <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">‹</button>
+        <button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">›</button>
+        <div class="lightbox-content">
+            <img id="lightboxImage" src="" alt="">
+        </div>
+    </div>
+
+    <script>
+        const images = [
+            {% for image in post.images %}
+            "{{ url_for('static', filename='uploads/' + image.filename) }}"{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        let currentImageIndex = 0;
+
+        function openLightbox(index) {
+            currentImageIndex = index;
+            updateLightboxImage();
+            document.getElementById('lightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function navigateLightbox(direction) {
+            currentImageIndex = (currentImageIndex + direction + images.length) % images.length;
+            updateLightboxImage();
+        }
+
+        function updateLightboxImage() {
+            document.getElementById('lightboxImage').src = images[currentImageIndex];
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const lightbox = document.getElementById('lightbox');
+            if (lightbox.classList.contains('active')) {
+                if (e.key === 'Escape') closeLightbox();
+                if (e.key === 'ArrowLeft') navigateLightbox(-1);
+                if (e.key === 'ArrowRight') navigateLightbox(1);
+            }
+        });
+
+        document.getElementById('lightbox').addEventListener('click', (e) => {
+            if (e.target.id === 'lightbox') {
+                closeLightbox();
+            }
+        });
+    </script>
+</body>
+</html>

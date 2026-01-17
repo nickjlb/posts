@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Blog</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="blog-body">
+    <nav class="blog-nav">
+        <div class="nav-container">
+            <h1 class="blog-title">My Blog</h1>
+            <a href="{{ url_for('cms') }}" class="btn btn-secondary btn-small">Admin</a>
+        </div>
+    </nav>
+
+    <div class="blog-container">
+        <!-- Tag Filter -->
+        <div class="filter-bar">
+            <div class="tag-filters">
+                <a href="{{ url_for('blog', per_page=per_page) }}" class="filter-tag {% if not tag_filter %}active{% endif %}">All</a>
+                {% for tag in all_tags %}
+                <a href="{{ url_for('blog', tag=tag, per_page=per_page) }}" class="filter-tag {% if tag_filter == tag %}active{% endif %}">{{ tag }}</a>
+                {% endfor %}
+            </div>
+
+            <div class="per-page-selector">
+                <label for="perPage">Posts per page:</label>
+                <select id="perPage" onchange="changePerPage(this.value)">
+                    <option value="6" {% if per_page == 6 %}selected{% endif %}>6</option>
+                    <option value="12" {% if per_page == 12 %}selected{% endif %}>12</option>
+                    <option value="24" {% if per_page == 24 %}selected{% endif %}>24</option>
+                    <option value="48" {% if per_page == 48 %}selected{% endif %}>48</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Masonry Grid -->
+        {% if posts %}
+        <div class="masonry-grid" id="masonryGrid">
+            {% for post in posts %}
+            <div class="masonry-item">
+                <div class="post-images">
+                    {% if post.images %}
+                        {% if post.images|length == 1 %}
+                            <img src="{{ url_for('static', filename='uploads/' + post.images[0].filename) }}"
+                                 alt="{{ post.title }}"
+                                 onclick="openLightbox({{ post.id }}, 0)">
+                        {% else %}
+                            <div class="image-grid-{{ 'two' if post.images|length == 2 else 'multi' }}">
+                                {% for image in post.images[:4] %}
+                                <div class="grid-image-wrapper {% if loop.index == 4 and post.images|length > 4 %}has-more{% endif %}">
+                                    <img src="{{ url_for('static', filename='uploads/' + image.filename) }}"
+                                         alt="{{ post.title }}"
+                                         onclick="openLightbox({{ post.id }}, {{ loop.index0 }})">
+                                    {% if loop.index == 4 and post.images|length > 4 %}
+                                    <div class="image-overlay">+{{ post.images|length - 4 }}</div>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="post-content">
+                    <h2>{{ post.title }}</h2>
+                    {% if post.content %}
+                    <p>{{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}</p>
+                    {% endif %}
+                    <div class="post-meta">
+                        {% if post.tags %}
+                        <div class="post-tags">
+                            {% for tag in post.tags %}
+                            <a href="{{ url_for('blog', tag=tag, per_page=per_page) }}" class="tag">{{ tag }}</a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="post-date">{{ post.created_at[:10] }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="{{ url_for('blog', page=page-1, per_page=per_page, tag=tag_filter) }}" class="btn btn-secondary">← Previous</a>
+            {% endif %}
+
+            <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
+
+            {% if page < total_pages %}
+            <a href="{{ url_for('blog', page=page+1, per_page=per_page, tag=tag_filter) }}" class="btn btn-secondary">Next →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state">
+            <h2>No posts yet</h2>
+            <p>Check back soon for new content!</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox">
+        <button class="lightbox-close" onclick="closeLightbox()">×</button>
+        <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">‹</button>
+        <button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">›</button>
+        <div class="lightbox-content">
+            <img id="lightboxImage" src="" alt="">
+        </div>
+    </div>
+
+    <script>
+        // Store all post images for lightbox
+        const postImages = {
+            {% for post in posts %}
+            {{ post.id }}: [
+                {% for image in post.images %}
+                "{{ url_for('static', filename='uploads/' + image.filename) }}"{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ]{% if not loop.last %},{% endif %}
+            {% endfor %}
+        };
+
+        let currentPostId = null;
+        let currentImageIndex = 0;
+
+        function openLightbox(postId, imageIndex) {
+            currentPostId = postId;
+            currentImageIndex = imageIndex;
+            updateLightboxImage();
+            document.getElementById('lightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function navigateLightbox(direction) {
+            const images = postImages[currentPostId];
+            currentImageIndex = (currentImageIndex + direction + images.length) % images.length;
+            updateLightboxImage();
+        }
+
+        function updateLightboxImage() {
+            const images = postImages[currentPostId];
+            document.getElementById('lightboxImage').src = images[currentImageIndex];
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const lightbox = document.getElementById('lightbox');
+            if (lightbox.classList.contains('active')) {
+                if (e.key === 'Escape') closeLightbox();
+                if (e.key === 'ArrowLeft') navigateLightbox(-1);
+                if (e.key === 'ArrowRight') navigateLightbox(1);
+            }
+        });
+
+        // Close on background click
+        document.getElementById('lightbox').addEventListener('click', (e) => {
+            if (e.target.id === 'lightbox') {
+                closeLightbox();
+            }
+        });
+
+        function changePerPage(value) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('per_page', value);
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        }
+    </script>
+</body>
+</html>
