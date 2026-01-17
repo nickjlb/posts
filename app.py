@@ -220,6 +220,55 @@ def cms():
 
     return render_template('cms.html', posts=posts_data)
 
+@app.route('/cms/images')
+def cms_images():
+    tag_filter = request.args.get('tag', None)
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get all images with their post information
+    if tag_filter:
+        query = '''
+            SELECT DISTINCT i.*, p.title as post_title, p.id as post_id
+            FROM images i
+            JOIN posts p ON i.post_id = p.id
+            JOIN post_tags pt ON p.id = pt.post_id
+            JOIN tags t ON pt.tag_id = t.id
+            WHERE t.name = ?
+            ORDER BY i.id DESC
+        '''
+        cursor.execute(query, (tag_filter,))
+    else:
+        cursor.execute('''
+            SELECT i.*, p.title as post_title, p.id as post_id
+            FROM images i
+            JOIN posts p ON i.post_id = p.id
+            ORDER BY i.id DESC
+        ''')
+
+    images = cursor.fetchall()
+
+    # Get all tags from posts that have images
+    cursor.execute('''
+        SELECT DISTINCT t.name
+        FROM tags t
+        JOIN post_tags pt ON t.id = pt.tag_id
+        JOIN posts p ON pt.post_id = p.id
+        JOIN images i ON p.id = i.post_id
+        ORDER BY t.name
+    ''')
+    all_tags = [row['name'] for row in cursor.fetchall()]
+
+    conn.close()
+
+    images_data = [dict(img) for img in images]
+
+    return render_template('images.html',
+                         images=images_data,
+                         tag_filter=tag_filter,
+                         all_tags=all_tags)
+
 @app.route('/cms/post/new', methods=['GET', 'POST'])
 def new_post():
     if request.method == 'POST':
