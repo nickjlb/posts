@@ -279,25 +279,34 @@ def blog():
     per_page = request.args.get('per_page', 12, type=int)
     tag_filter = request.args.get('tag', None)
     view_mode = request.args.get('view', 'masonry')  # masonry or grid
+    search_query = request.args.get('q', '').strip()
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # Build query based on tag filter
-    if tag_filter:
+    # Build query based on filters
+    if search_query:
+        # Search in title and content
+        search_term = f'%{search_query}%'
+        cursor.execute('''
+            SELECT * FROM posts
+            WHERE status = 'published' AND (title LIKE ? OR content LIKE ?)
+            ORDER BY featured DESC, created_at DESC
+        ''', (search_term, search_term))
+    elif tag_filter:
         query = '''
             SELECT DISTINCT p.* FROM posts p
             JOIN post_tags pt ON p.id = pt.post_id
             JOIN tags t ON pt.tag_id = t.id
             WHERE p.status = 'published' AND t.name = ?
-            ORDER BY p.created_at DESC
+            ORDER BY p.featured DESC, p.created_at DESC
         '''
         cursor.execute(query, (tag_filter,))
     else:
         cursor.execute('''
             SELECT * FROM posts
             WHERE status = 'published'
-            ORDER BY created_at DESC
+            ORDER BY featured DESC, created_at DESC
         ''')
 
     all_posts = cursor.fetchall()
@@ -325,7 +334,9 @@ def blog():
         posts_data.append({
             'id': post['id'],
             'title': post['title'],
-            'content': post['content'],
+            'content': render_markdown(post['content']) if post['content'] else '',
+            'slug': post.get('slug', ''),
+            'featured': post.get('featured', 0),
             'images': [dict(img) for img in images],
             'tags': tags,
             'created_at': post['created_at']
@@ -343,11 +354,12 @@ def blog():
                          posts=posts_data,
                          page=page,
                          per_page=per_page,
-                         total_pages=total_pages,
+                         total_pages=total_posts,
                          tag_filter=tag_filter,
                          all_tags=all_tags,
                          blog_title=blog_title,
-                         view_mode=view_mode)
+                         view_mode=view_mode,
+                         search_query=search_query)
 
 @app.route('/post/<int:post_id>')
 def view_post(post_id):
@@ -371,18 +383,62 @@ def view_post(post_id):
     ''', (post_id,))
     tags = [row['name'] for row in cursor.fetchall()]
 
+    # Get related posts (posts sharing tags with this one)
+    cursor.execute('''
+        SELECT DISTINCT p.*, COUNT(DISTINCT pt2.tag_id) as shared_tags
+        FROM posts p
+        JOIN post_tags pt2 ON p.id = pt2.post_id
+        WHERE pt2.tag_id IN (
+            SELECT pt.tag_id FROM post_tags pt WHERE pt.post_id = ?
+        )
+        AND p.id != ?
+        AND p.status = 'published'
+        GROUP BY p.id
+        ORDER BY shared_tags DESC, p.created_at DESC
+        LIMIT 3
+    ''', (post_id, post_id))
+    related_posts = []
+    for related in cursor.fetchall():
+        # Get first image for each related post
+        cursor.execute('SELECT filename FROM images WHERE post_id = ? ORDER BY order_index LIMIT 1', (related['id'],))
+        img_row = cursor.fetchone()
+        related_posts.append({
+            'id': related['id'],
+            'title': related['title'],
+            'slug': related.get('slug', ''),
+            'created_at': related['created_at'],
+            'image': img_row['filename'] if img_row else None
+        })
+
     conn.close()
 
     post_data = {
         'id': post['id'],
         'title': post['title'],
-        'content': post['content'],
+        'content': render_markdown(post['content']),
         'images': [dict(img) for img in images],
         'tags': tags,
-        'created_at': post['created_at']
+        'created_at': post['created_at'],
+        'slug': post.get('slug', '')
     }
 
-    return render_template('post.html', post=post_data)
+    return render_template('post.html', post=post_data, related_posts=related_posts)
+
+@app.route('/p/<slug>')
+def view_post_by_slug(slug):
+    """View post by slug instead of ID"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT * FROM posts WHERE slug = ? AND status = "published"', (slug,))
+    post = cursor.fetchone()
+
+    if not post:
+        conn.close()
+        return "Post not found", 404
+
+    # Use the existing view_post logic
+    return view_post(post['id'])
 
 @app.route('/cms')
 def cms():
@@ -529,11 +585,122 @@ def cms_settings():
     blog_title = get_setting('blog_title', 'My Blog')
     return render_template('settings.html', blog_title=blog_title)
 
+@app.route('/cms/categories', methods=['GET', 'POST'])
+def cms_categories():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'add':
+            name = request.form.get('name', '').strip()
+            if name:
+                cursor.execute('INSERT INTO categories (name) VALUES (?)', (name,))
+                conn.commit()
+
+        elif action == 'edit':
+            category_id = request.form.get('category_id', type=int)
+            name = request.form.get('name', '').strip()
+            if category_id and name:
+                cursor.execute('UPDATE categories SET name = ? WHERE id = ?', (name, category_id))
+                conn.commit()
+
+        elif action == 'delete':
+            category_id = request.form.get('category_id', type=int)
+            if category_id:
+                # Check if any posts use this category
+                cursor.execute('SELECT COUNT(*) as count FROM posts WHERE category_id = ?', (category_id,))
+                count = cursor.fetchone()['count']
+                if count > 0:
+                    conn.close()
+                    return f"Cannot delete category: {count} post(s) are using it. Please reassign those posts first.", 400
+                cursor.execute('DELETE FROM categories WHERE id = ?', (category_id,))
+                conn.commit()
+
+        conn.close()
+        return redirect(url_for('cms_categories'))
+
+    # Fetch all categories with post counts
+    cursor.execute('''
+        SELECT c.*, COUNT(p.id) as post_count
+        FROM categories c
+        LEFT JOIN posts p ON c.id = p.category_id
+        GROUP BY c.id
+        ORDER BY c.name
+    ''')
+    categories = cursor.fetchall()
+    conn.close()
+
+    return render_template('categories.html', categories=categories)
+
+@app.route('/cms/export')
+def export_data():
+    """Export all blog data as JSON for backup"""
+    import json
+    from datetime import datetime
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Export posts with tags
+    cursor.execute('SELECT * FROM posts ORDER BY created_at DESC')
+    posts = []
+    for post_row in cursor.fetchall():
+        post = dict(post_row)
+
+        # Get tags for this post
+        cursor.execute('''
+            SELECT t.name FROM tags t
+            JOIN post_tags pt ON t.id = pt.tag_id
+            WHERE pt.post_id = ?
+        ''', (post['id'],))
+        post['tags'] = [row['name'] for row in cursor.fetchall()]
+
+        # Get images for this post
+        cursor.execute('SELECT * FROM images WHERE post_id = ? ORDER BY order_index', (post['id'],))
+        post['images'] = [dict(img) for img in cursor.fetchall()]
+
+        posts.append(post)
+
+    # Export categories
+    cursor.execute('SELECT * FROM categories ORDER BY name')
+    categories = [dict(row) for row in cursor.fetchall()]
+
+    # Export settings
+    cursor.execute('SELECT * FROM settings')
+    settings = {row['key']: row['value'] for row in cursor.fetchall()}
+
+    conn.close()
+
+    # Create export data
+    export = {
+        'version': '1.0',
+        'exported_at': datetime.now().isoformat(),
+        'posts': posts,
+        'categories': categories,
+        'settings': settings
+    }
+
+    # Return as JSON download
+    response = jsonify(export)
+    response.headers['Content-Disposition'] = f'attachment; filename=blog_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
 @app.route('/cms/post/new', methods=['GET', 'POST'])
 def new_post():
     if request.method == 'POST':
         return save_post()
-    return render_template('edit_post.html', post=None)
+
+    # Fetch all categories
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM categories ORDER BY name')
+    categories = cursor.fetchall()
+    conn.close()
+
+    return render_template('edit_post.html', post=None, categories=categories)
 
 @app.route('/cms/post/<int:post_id>/edit', methods=['GET', 'POST'])
 def edit_post(post_id):
@@ -560,6 +727,10 @@ def edit_post(post_id):
     ''', (post_id,))
     tags = [row['name'] for row in cursor.fetchall()]
 
+    # Fetch all categories
+    cursor.execute('SELECT * FROM categories ORDER BY name')
+    categories = cursor.fetchall()
+
     conn.close()
 
     post_data = {
@@ -567,11 +738,14 @@ def edit_post(post_id):
         'title': post['title'],
         'content': post['content'],
         'status': post['status'],
+        'slug': post.get('slug', ''),
+        'featured': post.get('featured', 0),
+        'category_id': post.get('category_id'),
         'images': [dict(img) for img in images],
         'tags': tags
     }
 
-    return render_template('edit_post.html', post=post_data)
+    return render_template('edit_post.html', post=post_data, categories=categories)
 
 def save_post(post_id=None):
     title = request.form.get('title', '')
@@ -579,23 +753,39 @@ def save_post(post_id=None):
     status = request.form.get('status', 'draft')
     tags_input = request.form.get('tags', '')
     pending_images = request.form.get('pending_images', '')
+    slug = request.form.get('slug', '').strip()
+    featured = 1 if request.form.get('featured') == 'on' else 0
+    category_id = request.form.get('category_id', type=int)
 
+    # Auto-generate slug if not provided
+    if not slug:
+        slug = generate_slug(title)
+
+    # Ensure slug is unique
     conn = get_db()
     cursor = conn.cursor()
+    original_slug = slug
+    counter = 1
+    while True:
+        cursor.execute('SELECT id FROM posts WHERE slug = ? AND id != ?', (slug, post_id or 0))
+        if not cursor.fetchone():
+            break
+        slug = f"{original_slug}-{counter}"
+        counter += 1
 
     if post_id:
         # Update existing post
         cursor.execute('''
             UPDATE posts
-            SET title = ?, content = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            SET title = ?, content = ?, slug = ?, status = ?, featured = ?, category_id = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (title, content, status, post_id))
+        ''', (title, content, slug, status, featured, category_id, post_id))
     else:
         # Create new post
         cursor.execute('''
-            INSERT INTO posts (title, content, status)
-            VALUES (?, ?, ?)
-        ''', (title, content, status))
+            INSERT INTO posts (title, content, slug, status, featured, category_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (title, content, slug, status, featured, category_id))
         post_id = cursor.lastrowid
 
         # Associate pending images with the new post
@@ -617,6 +807,17 @@ def save_post(post_id=None):
             cursor.execute('SELECT id FROM tags WHERE name = ?', (tag_name,))
             tag_id = cursor.fetchone()['id']
             cursor.execute('INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)', (post_id, tag_id))
+
+    # Update image captions and alt text
+    for key in request.form:
+        if key.startswith('caption_'):
+            image_id = key.replace('caption_', '')
+            caption = request.form.get(key, '')
+            cursor.execute('UPDATE images SET caption = ? WHERE id = ?', (caption, image_id))
+        elif key.startswith('alt_'):
+            image_id = key.replace('alt_', '')
+            alt_text = request.form.get(key, '')
+            cursor.execute('UPDATE images SET alt_text = ? WHERE id = ?', (alt_text, image_id))
 
     conn.commit()
     conn.close()

@@ -43,6 +43,28 @@
             {{ post.content|safe }}
         </div>
         {% endif %}
+
+        <!-- Related Posts -->
+        {% if related_posts %}
+        <aside class="related-posts">
+            <h3>Related Posts</h3>
+            <div class="related-posts-grid">
+                {% for related in related_posts %}
+                <a href="{% if related.slug %}/p/{{ related.slug }}{% else %}/post/{{ related.id }}{% endif %}" class="related-post-card">
+                    {% if related.image %}
+                    <div class="related-post-image">
+                        <img src="{{ url_for('static', filename='uploads/' + related.image) }}" alt="{{ related.title }}">
+                    </div>
+                    {% endif %}
+                    <div class="related-post-content">
+                        <h4>{{ related.title }}</h4>
+                        <span class="related-post-date">{{ related.created_at[:10] }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </aside>
+        {% endif %}
     </article>
 
     <!-- Lightbox -->

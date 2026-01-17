@@ -25,13 +25,49 @@
             </div>
 
             <div class="form-group">
-                <label for="content">Content</label>
+                <label for="slug">URL Slug</label>
+                <input type="text" id="slug" name="slug" class="form-control" value="{{ post.slug if post else '' }}" placeholder="auto-generated-from-title">
+                <small style="color: var(--text-muted); margin-top: 4px; display: block;">
+                    Leave blank to auto-generate from title. Used for SEO-friendly URLs like /p/your-slug
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="content">Content (Markdown supported)</label>
                 <textarea id="content" name="content" class="form-control" rows="10">{{ post.content if post else '' }}</textarea>
+                <small style="color: var(--text-muted); margin-top: 4px; display: block;">
+                    Supports markdown: **bold**, *italic*, [links](url), images, code blocks, etc.
+                </small>
             </div>
 
             <div class="form-group">
                 <label for="tags">Tags (comma separated)</label>
                 <input type="text" id="tags" name="tags" class="form-control" value="{{ post.tags|join(', ') if post else '' }}" placeholder="travel, photography, nature">
+            </div>
+
+            <div class="form-group">
+                <label for="category_id">Category</label>
+                <select id="category_id" name="category_id" class="form-control">
+                    <option value="">None</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}" {% if post and post.category_id == category.id %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-muted); margin-top: 4px; display: block;">
+                    <a href="{{ url_for('cms_categories') }}" style="color: var(--primary);">Manage categories</a>
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label" style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" name="featured" {% if post and post.featured %}checked{% endif %} style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                    <span>Featured Post</span>
+                </label>
+                <small style="color: var(--text-muted); margin-top: 4px; display: block;">
+                    Featured posts appear at the top of your blog
+                </small>
             </div>
 
             <div class="form-group">
@@ -50,9 +86,39 @@
                 <div class="images-preview" id="imagesPreview">
                     {% if post and post.images %}
                         {% for image in post.images %}
-                        <div class="image-preview-item" data-image-id="{{ image.id }}">
-                            <img src="{{ url_for('static', filename='uploads/' + image.filename) }}" alt="">
+                        <div class="image-preview-item enhanced" data-image-id="{{ image.id }}">
+                            <img src="{{ url_for('static', filename='uploads/' + image.filename) }}" alt="{{ image.alt_text or '' }}">
                             <button type="button" class="delete-image-btn" onclick="deleteImage({{ image.id }})">×</button>
+
+                            <div class="image-metadata">
+                                <div class="metadata-field">
+                                    <label>Caption:</label>
+                                    <input type="text"
+                                           name="caption_{{ image.id }}"
+                                           class="metadata-input"
+                                           value="{{ image.caption or '' }}"
+                                           placeholder="Image caption">
+                                </div>
+                                <div class="metadata-field">
+                                    <label>Alt Text:</label>
+                                    <input type="text"
+                                           name="alt_{{ image.id }}"
+                                           class="metadata-input"
+                                           value="{{ image.alt_text or '' }}"
+                                           placeholder="Descriptive alt text">
+                                </div>
+                                {% if image.camera or image.lens or image.iso or image.aperture or image.shutter_speed %}
+                                <div class="exif-data">
+                                    <strong>📷 EXIF:</strong>
+                                    {% if image.camera %}<span>{{ image.camera }}</span>{% endif %}
+                                    {% if image.lens %}<span>{{ image.lens }}</span>{% endif %}
+                                    {% if image.iso %}<span>ISO {{ image.iso }}</span>{% endif %}
+                                    {% if image.aperture %}<span>f/{{ image.aperture }}</span>{% endif %}
+                                    {% if image.shutter_speed %}<span>{{ image.shutter_speed }}s</span>{% endif %}
+                                    {% if image.focal_length %}<span>{{ image.focal_length }}mm</span>{% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
                         </div>
                         {% endfor %}
                     {% endif %}
