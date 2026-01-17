@@ -3,13 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ post.title }} - My Blog</title>
+    <title>{{ post.title }} - {{ blog_title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if blog_font in ['lora', 'inter', 'roboto-mono'] %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    {% if blog_font == 'lora' %}
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% elif blog_font == 'inter' %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% elif blog_font == 'roboto-mono' %}
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% endif %}
+    {% endif %}
+    <style>
+        {% if blog_font == 'lora' %}
+        body { font-family: 'Lora', serif !important; }
+        {% elif blog_font == 'inter' %}
+        body { font-family: 'Inter', sans-serif !important; }
+        {% elif blog_font == 'roboto-mono' %}
+        body { font-family: 'Roboto Mono', monospace !important; }
+        {% elif blog_font == 'serif' %}
+        body { font-family: Georgia, 'Times New Roman', serif !important; }
+        {% elif blog_font == 'sans-serif' %}
+        body { font-family: Arial, Helvetica, sans-serif !important; }
+        {% elif blog_font == 'monospace' %}
+        body { font-family: 'Courier New', Courier, monospace !important; }
+        {% endif %}
+    </style>
 </head>
 <body class="blog-body">
     <nav class="blog-nav">
         <div class="nav-container">
             <a href="{{ url_for('blog') }}" class="back-link">← Back to Blog</a>
+            {% if blog_logo %}
+            <a href="{{ url_for('blog') }}" class="blog-logo-link">
+                <img src="{{ url_for('static', filename='uploads/' + blog_logo) }}" alt="{{ blog_title }}" class="blog-logo" style="max-height: 40px;">
+            </a>
+            {% endif %}
         </div>
     </nav>
 

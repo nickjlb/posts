@@ -349,6 +349,8 @@ def blog():
     conn.close()
 
     blog_title = get_setting('blog_title', 'My Blog')
+    blog_logo = get_setting('blog_logo', '')
+    blog_font = get_setting('blog_font', 'system')
 
     return render_template('blog.html',
                          posts=posts_data,
@@ -358,6 +360,8 @@ def blog():
                          tag_filter=tag_filter,
                          all_tags=all_tags,
                          blog_title=blog_title,
+                         blog_logo=blog_logo,
+                         blog_font=blog_font,
                          view_mode=view_mode,
                          search_query=search_query)
 
@@ -422,7 +426,12 @@ def view_post(post_id):
         'slug': post.get('slug', '')
     }
 
-    return render_template('post.html', post=post_data, related_posts=related_posts)
+    blog_title = get_setting('blog_title', 'My Blog')
+    blog_logo = get_setting('blog_logo', '')
+    blog_font = get_setting('blog_font', 'system')
+
+    return render_template('post.html', post=post_data, related_posts=related_posts,
+                         blog_title=blog_title, blog_logo=blog_logo, blog_font=blog_font)
 
 @app.route('/p/<slug>')
 def view_post_by_slug(slug):
@@ -568,22 +577,65 @@ def blog_images():
 
     images_data = [dict(img) for img in images]
     blog_title = get_setting('blog_title', 'My Blog')
+    blog_logo = get_setting('blog_logo', '')
+    blog_font = get_setting('blog_font', 'system')
 
     return render_template('blog_images.html',
                          images=images_data,
                          tag_filter=tag_filter,
                          all_tags=all_tags,
-                         blog_title=blog_title)
+                         blog_title=blog_title,
+                         blog_logo=blog_logo,
+                         blog_font=blog_font)
 
 @app.route('/cms/settings', methods=['GET', 'POST'])
 def cms_settings():
     if request.method == 'POST':
         blog_title = request.form.get('blog_title', 'My Blog')
         set_setting('blog_title', blog_title)
+
+        # Handle logo upload
+        if 'logo' in request.files:
+            logo_file = request.files['logo']
+            if logo_file and logo_file.filename:
+                # Save old logo path to delete it later
+                old_logo = get_setting('blog_logo', '')
+
+                # Generate unique filename
+                import uuid
+                ext = os.path.splitext(logo_file.filename)[1]
+                logo_filename = f"logo_{uuid.uuid4().hex[:8]}{ext}"
+                logo_path = os.path.join(UPLOAD_FOLDER, logo_filename)
+
+                # Save new logo
+                logo_file.save(logo_path)
+                set_setting('blog_logo', logo_filename)
+
+                # Delete old logo if it exists
+                if old_logo:
+                    old_logo_path = os.path.join(UPLOAD_FOLDER, old_logo)
+                    if os.path.exists(old_logo_path):
+                        os.remove(old_logo_path)
+
+        # Handle logo removal
+        if request.form.get('remove_logo') == '1':
+            old_logo = get_setting('blog_logo', '')
+            if old_logo:
+                old_logo_path = os.path.join(UPLOAD_FOLDER, old_logo)
+                if os.path.exists(old_logo_path):
+                    os.remove(old_logo_path)
+            set_setting('blog_logo', '')
+
+        # Handle font selection
+        blog_font = request.form.get('blog_font', 'system')
+        set_setting('blog_font', blog_font)
+
         return redirect(url_for('cms'))
 
     blog_title = get_setting('blog_title', 'My Blog')
-    return render_template('settings.html', blog_title=blog_title)
+    blog_logo = get_setting('blog_logo', '')
+    blog_font = get_setting('blog_font', 'system')
+    return render_template('settings.html', blog_title=blog_title, blog_logo=blog_logo, blog_font=blog_font)
 
 @app.route('/cms/categories', methods=['GET', 'POST'])
 def cms_categories():

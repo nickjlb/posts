@@ -552,6 +552,19 @@ textarea.form-control {
     color: var(--text-primary);
 }
 
+.blog-logo-link {
+    display: block;
+    line-height: 0;
+}
+
+.blog-logo {
+    max-height: 50px;
+    height: auto;
+    width: auto;
+    max-width: 300px;
+    object-fit: contain;
+}
+
 .back-link {
     font-size: 14px;
     font-weight: 500;
