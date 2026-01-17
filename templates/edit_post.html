@@ -16,6 +16,9 @@
         </header>
 
         <form method="POST" class="post-form" id="postForm">
+            <!-- Hidden field to store pending image filenames for new posts -->
+            <input type="hidden" id="pendingImages" name="pending_images" value="">
+
             <div class="form-group">
                 <label for="title">Title</label>
                 <input type="text" id="title" name="title" class="form-control" value="{{ post.title if post else '' }}" required>
@@ -82,6 +85,10 @@
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const imagesPreview = document.getElementById('imagesPreview');
+        const pendingImagesField = document.getElementById('pendingImages');
+
+        // Track pending images for new posts (not yet saved)
+        let pendingImages = [];
 
         // Click to upload
         uploadArea.addEventListener('click', () => {
@@ -145,8 +152,18 @@
                 .then(data => {
                     preview.classList.remove('uploading');
                     if (postId && data.filename) {
-                        // Reload to get image ID
+                        // Existing post: reload to get image ID
                         location.reload();
+                    } else if (data.filename) {
+                        // New post: track the filename and add delete button
+                        pendingImages.push(data.filename);
+                        updatePendingImagesField();
+
+                        preview.setAttribute('data-pending-filename', data.filename);
+                        preview.innerHTML = `
+                            <img src="${data.url}" alt="">
+                            <button type="button" class="delete-image-btn" onclick="deletePendingImage('${data.filename}')">×</button>
+                        `;
                     }
                 })
                 .catch(error => {
@@ -156,6 +173,32 @@
                 });
             };
             reader.readAsDataURL(file);
+        }
+
+        function updatePendingImagesField() {
+            pendingImagesField.value = pendingImages.join(',');
+        }
+
+        function deletePendingImage(filename) {
+            if (!confirm('Delete this image?')) return;
+
+            // Remove from pending list
+            pendingImages = pendingImages.filter(f => f !== filename);
+            updatePendingImagesField();
+
+            // Remove preview
+            const imageItem = document.querySelector(`[data-pending-filename="${filename}"]`);
+            if (imageItem) {
+                imageItem.remove();
+            }
+
+            // Delete file from server
+            fetch(`/cms/image/delete-file/${filename}`, {
+                method: 'POST'
+            })
+            .catch(error => {
+                console.error('Delete failed:', error);
+            });
         }
 
         function deleteImage(imageId) {

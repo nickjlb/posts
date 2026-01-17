@@ -269,6 +269,7 @@ def save_post(post_id=None):
     content = request.form.get('content', '')
     status = request.form.get('status', 'draft')
     tags_input = request.form.get('tags', '')
+    pending_images = request.form.get('pending_images', '')
 
     conn = get_db()
     cursor = conn.cursor()
@@ -287,6 +288,15 @@ def save_post(post_id=None):
             VALUES (?, ?, ?)
         ''', (title, content, status))
         post_id = cursor.lastrowid
+
+        # Associate pending images with the new post
+        if pending_images:
+            filenames = [f.strip() for f in pending_images.split(',') if f.strip()]
+            for index, filename in enumerate(filenames):
+                cursor.execute('''
+                    INSERT INTO images (post_id, filename, order_index)
+                    VALUES (?, ?, ?)
+                ''', (post_id, filename, index))
 
     # Handle tags
     cursor.execute('DELETE FROM post_tags WHERE post_id = ?', (post_id,))
@@ -388,6 +398,18 @@ def delete_image(image_id):
     conn.close()
 
     return jsonify({'success': True})
+
+@app.route('/cms/image/delete-file/<filename>', methods=['POST'])
+def delete_image_file(filename):
+    # Delete a pending image file (not yet associated with a post)
+    try:
+        # Security: only allow deleting from uploads folder
+        filepath = app.config['UPLOAD_FOLDER'] / secure_filename(filename)
+        if filepath.exists():
+            os.remove(filepath)
+        return jsonify({'success': True})
+    except:
+        return jsonify({'success': False}), 500
 
 @app.route('/static/uploads/<filename>')
 def uploaded_file(filename):
