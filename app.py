@@ -335,8 +335,8 @@ def blog():
             'id': post['id'],
             'title': post['title'],
             'content': render_markdown(post['content']) if post['content'] else '',
-            'slug': post.get('slug', ''),
-            'featured': post.get('featured', 0),
+            'slug': post['slug'] if 'slug' in post.keys() else '',
+            'featured': post['featured'] if 'featured' in post.keys() else 0,
             'images': [dict(img) for img in images],
             'tags': tags,
             'created_at': post['created_at']
@@ -409,7 +409,7 @@ def view_post(post_id):
         related_posts.append({
             'id': related['id'],
             'title': related['title'],
-            'slug': related.get('slug', ''),
+            'slug': related['slug'] if 'slug' in related.keys() else '',
             'created_at': related['created_at'],
             'image': img_row['filename'] if img_row else None
         })
@@ -423,7 +423,7 @@ def view_post(post_id):
         'images': [dict(img) for img in images],
         'tags': tags,
         'created_at': post['created_at'],
-        'slug': post.get('slug', '')
+        'slug': post['slug'] if 'slug' in post.keys() else ''
     }
 
     blog_title = get_setting('blog_title', 'My Blog')
@@ -790,9 +790,9 @@ def edit_post(post_id):
         'title': post['title'],
         'content': post['content'],
         'status': post['status'],
-        'slug': post.get('slug', ''),
-        'featured': post.get('featured', 0),
-        'category_id': post.get('category_id'),
+        'slug': post['slug'] if 'slug' in post.keys() else '',
+        'featured': post['featured'] if 'featured' in post.keys() else 0,
+        'category_id': post['category_id'] if 'category_id' in post.keys() else None,
         'images': [dict(img) for img in images],
         'tags': tags
     }
