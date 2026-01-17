@@ -4,13 +4,24 @@ This guide will help you build the Blog CMS executable on Windows.
 
 ## Prerequisites
 
-1. **Python 3.8+**
+1. **Python 3.8+ (including Python 3.14)**
    - Download from: https://www.python.org/downloads/
+   - **✓ Tested and compatible with Python 3.14**
    - During installation, CHECK the box "Add Python to PATH"
    - Verify installation: Open Command Prompt and type `python --version`
 
 2. **pip** (comes with Python)
    - Verify: `pip --version`
+
+## Quick Test (Recommended)
+
+Before building, verify your system is ready:
+
+```bash
+test_setup.bat
+```
+
+This will check Python version, install dependencies, and verify everything works!
 
 ## Step-by-Step Build Instructions
 

@@ -26,20 +26,22 @@ A beautiful, dark-themed, image-focused blog CMS with an intuitive interface. Pe
 ### Option 2: Build from Source
 
 **Prerequisites:**
-- Python 3.8 or higher
+- Python 3.8 or higher (✓ **Compatible with Python 3.14**)
 - pip (Python package manager)
 
 **Steps:**
 
-1. **Install dependencies:**
+1. **Test your setup (recommended):**
    ```bash
-   pip install -r requirements.txt
+   test_setup.bat
    ```
 
 2. **Build the executable:**
    ```bash
    build.bat
    ```
+
+   This will automatically install dependencies and create the .exe
 
 3. **Find your executable:**
    - The file will be in `dist/BlogCMS.exe`
